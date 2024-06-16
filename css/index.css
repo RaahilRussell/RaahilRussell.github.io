@@ -879,8 +879,12 @@ team-member > team-member-descriptor > h3 {
 
 team-member.large {
     grid-column: 1 / -1;
-    grid-template-columns: var(--team-member-icon-size-large) auto;
+    /*grid-template-columns: var(--team-member-icon-size-large) auto;*/
     margin-bottom: 1.5em;
+    /*margin-bottom: 1em;*/
+    display: grid;
+    grid-template-columns: var(--team-member-icon-size-small) minmax(0, auto); /* minmax(0, auto) prevents overflow */
+    column-gap: .7em;
 }
 
 team-member.large > team-member-image {
