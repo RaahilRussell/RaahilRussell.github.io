@@ -205,6 +205,33 @@ async function findEvent(sku) {
     return (await robotEventsGet("events", {sku})).result[0];
 }
 
+// Local storage logic for awards and events
+async function getEventsAndAwardsForTeam(teamNumber) {
+    const [eventsResponse, awardsResponse] = await Promise.all([
+        (async () => {
+            let eventsList;
+            if (localStorage.getItem(`eventsList${teamNumber}`) !== null) {
+                eventsList = JSON.parse(localStorage.getItem(`eventsList${teamNumber}`));
+            } else {
+                eventsList = await robotEventsGetForTeam(`${teamNumber}`, "events?per_page=250");
+                localStorage.setItem(`eventsList${teamNumber}`, JSON.stringify(eventsList));
+            }
+            return eventsList;
+        })(),
+        (async () => {
+            let awardList;
+            if (localStorage.getItem(`awardList${teamNumber}`) !== null) {
+                awardList = JSON.parse(localStorage.getItem(`awardList${teamNumber}`));
+            } else {
+                awardList = await robotEventsGetForTeam(`${teamNumber}`, "awards?per_page=250");
+                localStorage.setItem(`awardList${teamNumber}`, JSON.stringify(awardList));
+            }
+            return awardList;
+        })()
+    ]);
+
+    return [eventsResponse[0], awardsResponse[0]];
+}
 
 // Run a collector
 
