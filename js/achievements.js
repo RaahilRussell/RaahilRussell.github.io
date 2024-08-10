@@ -1,18 +1,13 @@
 /**
- * @file Script that runs on the Achievements page. Queries data from the VexDB API and counts certain attributes to present team totals.
+ * @file Script that runs on the Achievements page. Queries data from the RobotEvents API and counts certain attributes to present team totals.
  */
 
 import {qs, qsa, createElement, declade} from "./util.js";
-import {teamNumbers, vexdbGet, vexdbGetForTeams, createNotice, ResultObjectRecordCollector, groomAwardName, scopeNames, generateInstanceDetails} from "./app-util.js";
+import {teamNumbers, robotEventsGetForTeams, createNotice, ResultObjectRecordCollector, groomAwardName, scopeNames, generateInstanceDetails} from "./app-util.js";
 import {LoadingSign} from "./ce/LoadingSign.js";
 
 const instanceDisplay = qs("instance-display");
 
-// Classes used to count instances of a type from the query
-
-/**
- * @class Contains a collector, along with several common properties among collectors on the Achievements page.
- */
 class RecordCollectorWrapper {
     constructor({
         collector,
@@ -38,11 +33,11 @@ class RecordCollectorWrapper {
     }
 
     async count(teamNumbersTarget) {
-        // Query VexDB
-        const resultObjects = (await vexdbGetForTeams(this.endpointName, teamNumbersTarget, this.queryOptions, true)).flat();
-    
+        // Query RobotEvents API
+        const resultObjects = (await robotEventsGetForTeams(this.endpointName, teamNumbersTarget, this.queryOptions, true)).flat();
+
         await this.collector.collectAsync(resultObjects);
-    
+
         // Show the list of categories
         this.updateDisplay();
     }
@@ -56,7 +51,7 @@ class RecordCollectorWrapper {
         for (const record of this.collector.records) {
             createBlock(record.count, this.generateBlockLabel(record), this.grid, false, record);
         }
-    
+
         const nTotal = this.collector.records.reduce((accumulator, {count}) => accumulator + count, 0);
         createBlock(nTotal, "Total", this.grid, true, this);
     }
@@ -65,10 +60,10 @@ class RecordCollectorWrapper {
         switch (true) {
             case this.nLoadingFails === 1:
                 return "";
-    
+
             case this.nLoadingFails === 2:
                 return " again";
-    
+
             default:
                 return ` ${this.nLoadingFails} times`;
         }
@@ -84,47 +79,41 @@ class RecordCollectorWrapper {
         // Sort the instances into teams
         const instancesByTeam = countCategoryInstancesByTeam(instances);
         const instancesByTeamEntries = Object.entries(instancesByTeam).sort((a, b) => a[0].localeCompare(b[0]));
-    
+
         for (const [teamNumber, instances] of instancesByTeamEntries) {
             // Create a section for each team
-    
             createElement("h3", {
                 children: [
                     createElement("a", {
                         properties: {
                             href: `../teams/${teamNumber}/`,
                         },
-    
                         textContent: teamNumber,
                     }),
                 ],
-    
                 parent: instanceDisplay,
             });
-    
+
             createElement("instance-subcounter", {
                 textContent: instances.length,
-    
                 parent: instanceDisplay,
             });
-    
+
             const list = createElement("instance-list", {
                 parent: instanceDisplay,
             });
-    
+
             // Since the number of instances to display is known, placeholder elements can be used to fill the space and avoid page jumping
             for (let i = 0; i < instances.length; i++) {
                 createElement("instance-details", {
                     children: [
                         createNotice("loading"),
                     ],
-    
                     classes: ["placeholder"],
-    
                     parent: list,
                 });
             }
-    
+
             this.buildInstancesDisplay(instances, list);
         }
     }
@@ -147,7 +136,7 @@ const eventScopeWrapper = new RecordCollectorWrapper({
     },
     
     buildInstancesDisplay(instances, list) {
-        instances = instances.sort((a, b) => new Date(b.start) - new Date(a.start));
+        instances = instances.sort((a, b) => new Date(b.start_date) - new Date(a.start_date));
         for (let i = 0; i < instances.length; i++) {
             const instance = instances[i];
             const instanceDetailsContainer = list.children[i];
@@ -164,9 +153,9 @@ const eventScopeWrapper = new RecordCollectorWrapper({
 const awardsWrapper = new RecordCollectorWrapper({
     collector: ResultObjectRecordCollector.createCommon.awardsByType({
         async willAccept(resultObject) {
-            // Only awards from past events or from those unknown to VexDB.
+            // Only awards from past events or from those unknown to RobotEvents.
             const event = await findEvent(resultObject.sku);
-            return !event || new Date() > new Date(event.end);
+            return !event || new Date() > new Date(event.end_date);
         },
     }),
 
@@ -190,7 +179,6 @@ const awardsWrapper = new RecordCollectorWrapper({
                 const event = await findEvent(instance.sku);
                 generateInstanceDetails.award(instance, instanceDetailsContainer, event);
             })();
-
         }
     },
 });
@@ -202,12 +190,10 @@ async function findEvent(sku) {
         }
     }
 
-    return (await vexdbGet("events", {sku})).result[0];
+    return (await robotEventsGet("events", {sku})).result[0];
 }
 
-
 // Run a collector
-
 let nBlock = 0; // numerical id, used to match up each block with its <input>
 // Create a box displaying a number with a label
 function createBlock(number, label, parent, emphasize=false, collectorWrapper) {
@@ -225,19 +211,16 @@ function createBlock(number, label, parent, emphasize=false, collectorWrapper) {
             type: "radio",
             id,
         },
-
         parent,
     });
-    
+
     inputsToRecords.set(input, collectorWrapper);
 
     createElement("label", {
         attributes: [
             ["for", id],
         ],
-
         classes,
-
         children: [
             createElement("big-number", {
                 textContent: number,
@@ -246,7 +229,6 @@ function createBlock(number, label, parent, emphasize=false, collectorWrapper) {
                 textContent: label,
             }),
         ],
-
         parent,
     });
 
@@ -273,7 +255,6 @@ function instanceDisplayInit() {
 }
 
 // init
-
 const filterRows = qs("filter-rows");
 
 const recordForm = qs("form.stat-options");
@@ -331,6 +312,10 @@ function query() {
 
             collectorWrapper.collector.clear();
 
+            // Select all teams if no filters are selected
+            return collectorWrapper.count(teamNumbersTarget.length !==It seems my response was cut off. Here's the continuation of the update to your `achievements.js` file:
+
+```javascript
             // Select all teams if no filters are selected
             return collectorWrapper.count(teamNumbersTarget.length !== 0 ? teamNumbersTarget : teamNumbers);
         };
