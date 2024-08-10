@@ -2,19 +2,19 @@
  * @file Defines utility methods that pertain to this project specifically. This script should only have `util.js` as an import.
  */
 
-import {declade, createElement, getData} from "./util.js";
+import {declade, createElement, xhrGet} from "./util.js";
 
 /**
  * Array of all active team numbers.
  * @constant
  * @type {string[]}
  */
-export const teamIDs = ['60031','60032','78265','108654','117453','117454'];
-export const teamNumbers = ['6121A','6121B','6121C','6121D','6121E','6121F'];
+export const teamNumbers = new Array(6).fill().map((value, i) => `6121${String.fromCharCode(i + "A".charCodeAt())}`);
+
 /**
- * Represents an error sent from a failed RobotEvents API response.
+ * Represents an error sent from a failed VexDB API response.
  */
-export class robotEventsApiError extends Error {
+export class VexdbApiError extends Error {
     constructor(message, code) {
         super(message);
         
@@ -23,82 +23,53 @@ export class robotEventsApiError extends Error {
 }
 
 /**
- * Queries data from the RobotEvents API once.
+ * Queries data from the VexDB API once.
  * @param {string} endpointNameGet The name of the endpoint, with "get_" trimmed from the start.
  * @param {object} [options] Search parameters to be passed through the URL.
  */
-export async function robotEventsGet(endpointNameGet) {
-    const url = `https://www.robotevents.com/api/v2/${endpointNameGet}`;
-    const response = await getData(url);
-      if (response.status === 0) {
-          throw new robotEventsApiError(response.error_text, response.error_code);
-      }
-  
-      return response;
-  }
+export async function vexdbGet(endpointNameGet, options={}) {
+    const response = JSON.parse(await xhrGet(`https://api.vexdb.io/v1/get_${endpointNameGet}?${new URLSearchParams(options)}`));
+
+    // If the response gave back an error, throw the object
+    if (response.status === 0) {
+        throw new VexdbApiError(response.error_text, response.error_code);
+    }
+
+    return response;
+}
 
 /**
- * Queries data from a RobotEvents API endpoint several times, once for each specified team.
+ * Queries data from a VexDB API endpoint several times, once for each specified team.
  * @param {string} endpointNameGet The name of the endpoint, with "get_" trimmed from the start.
- * @param {string[]} teamNumbersTarget The numbers of the teams to query RobotEvents for.
+ * @param {string[]} teamNumbersTarget The numbers of the teams to query VexDB for.
  * @param {object} [options] Search parameters to be passed through each URL, in addition to "team" being each team number.
  * @param {boolean} [attachTeamNumber] Whether to add the team number as a property to the object of each request.
  */
-export async function robotEventsGetForTeams(teamNumbersTarget = [], option, attachTeamNumber = false) {
-    
-    let promises = [];
-  
-    for (let index = 0; index < teamNumbersTarget.length; index++) {
-      let resultObject;
-      
-      const teamNumber = teamNumbersTarget[index];
-      
-      const teamID = teamIDs[teamNumbers.indexOf(teamNumber)];
-      
-      const url = `teams/${teamID}/${option}`;
-    
-      resultObject = robotEventsGet(url);
-    
-      if (attachTeamNumber) {
-        resultObject.team = teamNumber;
-      }
-      
-      promises.push(resultObject);
-    }
-    
-    return Promise.all(promises);
-  }
+export async function vexdbGetForTeams(endpointNameGet, teamNumbersTarget, options={}, attachTeamNumber=false) {
+    const promises = teamNumbersTarget.map(async teamNumber => {
+        const resultObjects = (await vexdbGet(endpointNameGet, Object.assign({team: teamNumber}, options))).result;
 
+        if (attachTeamNumber) {
+            for (const resultObject of resultObjects) {
+                resultObject.team = teamNumber;
+            }
+        }
 
-  export async function robotEventsGetForTeam (teamNumberTarget, option, attachTeamNumber = false) {
-    let promises = [];
-    let resultObject;
-      const teamID = teamIDs[teamNumbers.indexOf(teamNumberTarget)];
-      
-      const url = `teams/${teamID}/${option}`;
-    
-      resultObject = robotEventsGet(url);
-    
-      if (attachTeamNumber) {
-        resultObject.team = teamNumberTarget;
-      }
-      promises.push(resultObject);
-      return Promise.all(promises);
-    }
-    
-    
-  
-/**
- 
- * Queries data from a RobotEvents API endpoint several times, once for each team.
- * @param {string} endpointNameGet The name of the endpoint, with "get_" trimmed from the start.
- * @param {object} [option] Search parameters to be passed through each URL, in addition to "team" being each team number.
- * @param {boolean} [attachTeamNumber] Whether to add the team number as a property to the object of each request.
- */
-export async function robotEventsGetForAllTeams(option, attachTeamNumber) {
-    return (await robotEventsGetForTeams( teamNumbers, option, attachTeamNumber)).flat();
+        return resultObjects;
+    });
+
+    return await Promise.all(promises);
 }
 
+/**
+ * Queries data from a VexDB API endpoint several times, once for each team.
+ * @param {string} endpointNameGet The name of the endpoint, with "get_" trimmed from the start.
+ * @param {object} [options] Search parameters to be passed through each URL, in addition to "team" being each team number.
+ * @param {boolean} [attachTeamNumber] Whether to add the team number as a property to the object of each request.
+ */
+export async function vexdbGetForAllTeams(endpointNameGet, options, attachTeamNumber) {
+    return (await vexdbGetForTeams(endpointNameGet, teamNumbers, options, attachTeamNumber)).flat();
+}
 
 /**
  * Creates an inline notice to display a simple message.
@@ -124,13 +95,13 @@ export function dateString(date) {
 }
 
 /**
- * Converts a string indicating a range of dates if the two dates do not represent the time boundaries of a single-day event according to RobotEvents.
+ * Converts a string indicating a range of dates if the two dates do not represent the time boundaries of a single-day event according to VexDB.
  * @param {Date} start The start of an event.
  * @param {Date} end The end of an event.
  * @returns {string} A string in `Mmm D, YYYY – Mmm D, YYYY` format if the event is not single-day, or `Mmm D, YYYY` if it is single-day.
  */
 export function dateRangeString(start, end) {
-    // From RobotEvents API documentation
+    // From VexDB API documentation
     const singleDayEvent = start.getUTCDate() === end.getUTCDate()
         && start.getUTCMonth() === end.getUTCMonth()
         && start.getUTCFullYear() === end.getUTCFullYear();
@@ -150,18 +121,17 @@ export function dateRangeString(start, end) {
 export const generateInstanceDetails = {
     event(resultObject, instanceDetailsContainer) {
         instanceDetailsContainer = instanceDetailsContainer || createElement("instance-details");
-        
+
         declade(instanceDetailsContainer).classList.remove("placeholder");
 
         createElement("instance-name", {
             children: [
                 createElement("a", {
                     properties: {
-                        href: `https://www.robotevents.com/robot-competitions/vex-robotics-competition/RE-VRC-22-9124.html#general-info`,
+                        href: `https://robotevents.com/${resultObject.sku}.html`,
                         target: "_blank",
                     },
-                    textContent: resultObject,
-                    
+                    textContent: resultObject.name,
                 }),
             ],
 
@@ -173,11 +143,10 @@ export const generateInstanceDetails = {
                 document.createTextNode("("),
                 createElement("a", {
                     properties: {
-                        href: `https://www.robotevents.com/robot-competitions/vex-robotics-competition/RE-VRC-22-9124.html#general-info`,
-			    
+                        href: `https://vexdb.io/events/view/${resultObject.sku}`,
                         target: "_blank",
                     },
-                    textContent: "Monkey",
+                    textContent: "VexDB",
                 }),
                 document.createTextNode(")"),
             ],
@@ -232,7 +201,7 @@ export const generateInstanceDetails = {
             children: [
                 createElement("a", {
                     properties: {
-                        href: `https://www.robotevents.com/robot-competitions/vex-robotics-competition/${resultObject.event.code}.html#general-info`,
+                        href: `https://robotevents.com/${resultObject.sku}.html`,
                         target: "_blank",
                     },
                     textContent: event ? event.name : resultObject.sku,
@@ -247,10 +216,10 @@ export const generateInstanceDetails = {
                 document.createTextNode("("),
                 createElement("a", {
                     properties: {
-                        href: `https://www.robotevents.com/robot-competitions/vex-robotics-competition/${resultObject.event.code}.html#general-info`,
+                        href: `https://vexdb.io/events/view/${resultObject.sku}`,
                         target: "_blank",
                     },
-                    textContent: "RobotEvents",
+                    textContent: "VexDB",
                 }),
                 document.createTextNode(")"),
             ],
@@ -265,7 +234,7 @@ export const generateInstanceDetails = {
         });
         
         createElement("div", {
-            textContent: groomAwardName(resultObject.title),
+            textContent: resultObject.name,
 
             parent: instanceDetailsContainer,
         });
@@ -289,7 +258,7 @@ export class ResultObjectRecordCollector {
 
     /**
      * Adds a record identified by the given result object's data object.
-     * @param {object} resultObject The RobotEvents result object to initialize the record.
+     * @param {object} resultObject The VexDB result object to initialize the record.
      */
     addRecord(resultObject) {
         const record = new ResultObjectRecord(this.toDataObject(resultObject), this);
@@ -300,7 +269,7 @@ export class ResultObjectRecordCollector {
     /**
      * Adds a record with the given result object, identified by the result object's data object, treating
      * `toDataObject` as async if it directly returns a promise.
-     * @param {object} resultObject The RobotEvents result object to initialize the record.
+     * @param {object} resultObject The VexDB result object to initialize the record.
      */
     async addRecordAsync(resultObject) {
         const record = new ResultObjectRecord(await Promise.resolve(this.toDataObject(resultObject)), this);
@@ -310,7 +279,7 @@ export class ResultObjectRecordCollector {
 
     /**
      * Adds result objects to this collector's records.
-     * @param {object[]} resultObjects The RobotEvents result objects to parse.
+     * @param {object[]} resultObjects The VexDB result objects to parse.
      */
     collect(resultObjects) {
         // Iterate through the result objects
@@ -334,7 +303,7 @@ export class ResultObjectRecordCollector {
     /**
      * Adds result objects to this collector's records, treating `willAccept`, `recordEncompasses`, and `toDataObject`
      * as async if they directly return promises.
-     * @param {object[]} resultObjects The RobotEvents result objects to parse.
+     * @param {object[]} resultObjects The VexDB result objects to parse.
      */
     async collectAsync(resultObjects) {
         // Iterate through the result objects
@@ -436,7 +405,7 @@ class ResultObjectRecord {
 
 export function scopeOf(resultObject) {
     // Determine the scope of this event
-    // RobotEvents does not provide a scope property alongside events, but scope can usually be guessed from the event name
+    // VexDB does not provide a scope property alongside events, but scope can usually be guessed from the event name
     for (const scopeName of scopeNames) {
         if (resultObject.name.toUpperCase().includes(scopeName.toUpperCase())) {
             return scopeName;
@@ -454,8 +423,5 @@ export const scopeNames = [
 ];
 
 export function groomAwardName(name) {
-   let tor = name.replace(/ \(VRC\/VEXU\)/g, "");
-    tor = tor.replace(/ \(VRC\/VEXU\/VAIC\)/g, "");
-    tor = tor.replace(/ \(VRC\/VEXU\/VAIC\/ADC\)/g, "");
-    return tor;
+    return name.replace(/ \(VRC\/VEXU\)/g, "");
 }
